@@ -1,0 +1,31 @@
+# Binaries and object files
+bin/
+obj/
+*.o
+*.exe
+*.out
+
+# Build artifacts
+Makefile.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# IDE/editor-specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# Operating system-specific files
+.DS_Store
+Thumbs.db
+
+# Raylib-related files (if any)
+libraylib.*
