@@ -7,242 +7,248 @@
 #include <stdio.h>
 #include <time.h>
 
+// Configuration Macros
+#ifndef MAX_ROWS
+#define MAX_ROWS 100
+#endif
+
+#ifndef MAX_BRANCHES_PER_ROW
+#define MAX_BRANCHES_PER_ROW 1000
+#endif
+
+#ifndef MAX_LEAVES
+#define MAX_LEAVES 10000
+#endif
+
 // Define this macro in ONE source file to include the implementation
 #ifdef TREE_IMPLEMENTATION
 #define TREE_IMPL
 #endif
 
-#define MAX_ROWS 100
-#define MAX_BRANCHES_PER_ROW 1000
-#define MAX_LEAVES 10000
+// Struct Definitions
+typedef struct {
+    int Deg;
+    Vector2 V1;
+    Vector2 V2;
+    float Width;
+    float Height;
+    Color Color;
+} TreeBranch;
 
 typedef struct {
-    int deg;
-    Vector2 v1;
-    Vector2 v2;
-    float w;
-    float h;
-    Color color;
-} Branch;
+    size_t Row;
+    Vector2 V1;
+    Vector2 V2;
+    float Radius;
+    Color Color;
+} TreeLeaf;
 
 typedef struct {
-    size_t row;
-    Vector2 v1;
-    Vector2 v2;
-    float r;
-    Color color;
-} Leaf;
-
-typedef struct {
-    Branch branches[MAX_ROWS][MAX_BRANCHES_PER_ROW];
-    int branch_count[MAX_ROWS];
-    Leaf leaves[MAX_LEAVES];
-    int leaf_count;
-    float leaf_chance;
-    int max_row;
-    float x;
-    float y;
-    int current_row;
-    bool random_row;
-    int split_chance;
-    int split_angle[2];
-    unsigned char cs_branch[6];
-    unsigned char cs_leaf[6];
-    float left_x;
-    float right_x;
-    int grow_timer;
-    int grow_time;
-    float w;
-    float h;
+    TreeBranch Branches[MAX_ROWS][MAX_BRANCHES_PER_ROW];
+    int BranchCount[MAX_ROWS];
+    TreeLeaf Leaves[MAX_LEAVES];
+    int LeafCount;
+    float LeafChance;
+    int MaxRow;
+    float X;
+    float Y;
+    int CurrentRow;
+    bool RandomRow;
+    int SplitChance;
+    int SplitAngle[2];
+    unsigned char CsBranch[6];
+    unsigned char CsLeaf[6];
+    float LeftX;
+    float RightX;
+    int GrowTimer;
+    int GrowTime;
+    float Width;
+    float Height;
 } Tree;
 
-// Function declarations
-Color get_color(unsigned char cs[6]);
-void append_row(Tree *tree);
-void append_branch(Tree *tree, int row, Branch b);
-void append_leaf(Tree *tree, Leaf l);
-int get_angle(Tree *tree);
-float get_rot_x(int deg);
-float get_rot_y(int deg);
-void add_branch(Tree *tree, int deg, Branch *b);
-float get_next_pos(Tree *tree, float a, float b);
-void grow(Tree *tree);
-void load(Tree *tree);
-void update(Tree *tree);
-void draw(Tree *tree);
-Tree new_tree();
+// Function Declarations
+Tree TreeNewTree();
+void TreeLoad(Tree *tree);
+void TreeUpdate(Tree *tree);
+void TreeDraw(Tree *tree);
 
 #ifdef TREE_IMPL
 
-// Define DEG_TO_RAD using M_PI or fallback to manual definition
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 #define DEG_TO_RAD (M_PI / 180.0)
 
-Color get_color(unsigned char cs[6]) {
+// Helper Functions
+Color TreeGetColor(unsigned char cs[6]) {
     unsigned char r = rand() % (cs[1] - cs[0] + 1) + cs[0];
     unsigned char g = rand() % (cs[3] - cs[2] + 1) + cs[2];
     unsigned char b = rand() % (cs[5] - cs[4] + 1) + cs[4];
     return (Color){r, g, b, 255};
 }
 
-void append_row(Tree *tree) {
-    tree->branch_count[tree->current_row + 1] = 0;
+void TreeAppendRow(Tree *tree) {
+    tree->BranchCount[tree->CurrentRow + 1] = 0;
 }
 
-void append_branch(Tree *tree, int row, Branch b) {
-    tree->branches[row][tree->branch_count[row]++] = b;
+void TreeAppendBranch(Tree *tree, int row, TreeBranch branch) {
+    if (tree->BranchCount[row] < MAX_BRANCHES_PER_ROW) {
+        tree->Branches[row][tree->BranchCount[row]++] = branch;
+    } else {
+        fprintf(stderr, "Error: Maximum branches per row exceeded.\n");
+    }
 }
 
-void append_leaf(Tree *tree, Leaf l) {
-    tree->leaves[tree->leaf_count++] = l;
+void TreeAppendLeaf(Tree *tree, TreeLeaf leaf) {
+    if (tree->LeafCount < MAX_LEAVES) {
+        tree->Leaves[tree->LeafCount++] = leaf;
+    } else {
+        fprintf(stderr, "Error: Maximum leaves exceeded.\n");
+    }
 }
 
-int get_angle(Tree *tree) {
-    return rand() % (tree->split_angle[1] - tree->split_angle[0] + 1) + tree->split_angle[0];
+int TreeGetAngle(Tree *tree) {
+    return rand() % (tree->SplitAngle[1] - tree->SplitAngle[0] + 1) + tree->SplitAngle[0];
 }
 
-float get_rot_x(int deg) {
+float TreeGetRotX(int deg) {
     return cosf(deg * DEG_TO_RAD);
 }
 
-float get_rot_y(int deg) {
+float TreeGetRotY(int deg) {
     return sinf(deg * DEG_TO_RAD);
 }
 
-void add_branch(Tree *tree, int deg, Branch *b) {
-    float w = b->w * 0.9;
-    float h = b->h * 0.95;
-    float px = b->v2.x;
-    float py = b->v2.y;
-    float nx = px + get_rot_x(deg) * h;
-    float ny = py + get_rot_y(deg) * h;
-    Color c = get_color(tree->cs_branch);
-
-    Branch new_branch = {
-        .deg = deg,
-        .v1 = (Vector2){px, py},
-        .v2 = (Vector2){nx, ny},
-        .w = w,
-        .h = h,
-        .color = c
+void TreeAddBranch(Tree *tree, int deg, TreeBranch *branch) {
+    float w = branch->Width * 0.9;
+    float h = branch->Height * 0.95;
+    float px = branch->V2.x;
+    float py = branch->V2.y;
+    float nx = px + TreeGetRotX(deg) * h;
+    float ny = py + TreeGetRotY(deg) * h;
+    Color c = TreeGetColor(tree->CsBranch);
+    TreeBranch newBranch = {
+        .Deg = deg,
+        .V1 = (Vector2){px, py},
+        .V2 = (Vector2){nx, ny},
+        .Width = w,
+        .Height = h,
+        .Color = c
     };
-    append_branch(tree, tree->current_row + 1, new_branch);
+    TreeAppendBranch(tree, tree->CurrentRow + 1, newBranch);
 
-    float leaf_chance = ((float)rand() / RAND_MAX) * tree->current_row / tree->max_row;
-    if (leaf_chance > tree->leaf_chance) {
-        float div_x = get_rot_x(deg * 2) * w;
-        float div_y = get_rot_y(deg * 2) * w;
-        Leaf new_leaf = {
-            .row = tree->current_row,
-            .r = w,
-            .v1 = (Vector2){nx + div_x, ny + div_y},
-            .v2 = (Vector2){nx - div_x, ny - div_y},
-            .color = get_color(tree->cs_leaf)
+    float leafChance = ((float)rand() / RAND_MAX) * tree->CurrentRow / tree->MaxRow;
+    if (leafChance > tree->LeafChance) {
+        float divX = TreeGetRotX(deg * 2) * w;
+        float divY = TreeGetRotY(deg * 2) * w;
+        TreeLeaf newLeaf = {
+            .Row = tree->CurrentRow,
+            .Radius = w,
+            .V1 = (Vector2){nx + divX, ny + divY},
+            .V2 = (Vector2){nx - divX, ny - divY},
+            .Color = TreeGetColor(tree->CsLeaf)
         };
-        append_leaf(tree, new_leaf);
+        TreeAppendLeaf(tree, newLeaf);
     }
 
-    if (nx < tree->left_x) tree->left_x = nx;
-    if (nx > tree->right_x) tree->right_x = nx + w;
+    if (nx < tree->LeftX) tree->LeftX = nx;
+    if (nx > tree->RightX) tree->RightX = nx + w;
 }
 
-float get_next_pos(Tree *tree, float a, float b) {
-    return b + (a - b) * tree->grow_timer / (float)tree->grow_time;
+float TreeGetNextPos(Tree *tree, float a, float b) {
+    return b + (a - b) * tree->GrowTimer / (float)tree->GrowTime;
 }
 
-void grow(Tree *tree) {
-    append_row(tree);
-    int prev_row = tree->current_row;
-    for (int i = 0; i < tree->branch_count[prev_row]; i++) {
-        Branch *b = &tree->branches[prev_row][i];
+void TreeGrow(Tree *tree) {
+    TreeAppendRow(tree);
+    int prevRow = tree->CurrentRow;
+    for (int i = 0; i < tree->BranchCount[prevRow]; i++) {
+        TreeBranch *b = &tree->Branches[prevRow][i];
         int split = rand() % 100;
-        if (tree->split_chance > split) {
-            add_branch(tree, b->deg - get_angle(tree), b);
-            add_branch(tree, b->deg + get_angle(tree), b);
+        if (tree->SplitChance > split) {
+            TreeAddBranch(tree, b->Deg - TreeGetAngle(tree), b);
+            TreeAddBranch(tree, b->Deg + TreeGetAngle(tree), b);
         } else {
-            add_branch(tree, b->deg, b);
+            TreeAddBranch(tree, b->Deg, b);
         }
     }
-    tree->current_row++;
+    tree->CurrentRow++;
 }
 
-void load(Tree *tree) {
+void TreeLoad(Tree *tree) {
     int angle = -90;
-    append_row(tree);
-    Branch initial_branch = {
-        .deg = angle,
-        .v1 = (Vector2){tree->x, tree->y},
-        .v2 = (Vector2){tree->x, tree->y},
-        .w = tree->w,
-        .h = tree->h,
-        .color = WHITE
+    TreeAppendRow(tree);
+    TreeBranch initialBranch = {
+        .Deg = angle,
+        .V1 = (Vector2){tree->X, tree->Y},
+        .V2 = (Vector2){tree->X, tree->Y},
+        .Width = tree->Width,
+        .Height = tree->Height,
+        .Color = WHITE
     };
-    append_branch(tree, 0, initial_branch);
-    tree->grow_timer = rand() % tree->grow_time;
-    if (tree->random_row) {
-        int grow_to_row = rand() % tree->max_row;
-        while (tree->current_row < grow_to_row) {
-            grow(tree);
+    TreeAppendBranch(tree, 0, initialBranch);
+    tree->GrowTimer = rand() % tree->GrowTime;
+    if (tree->RandomRow) {
+        int growToRow = rand() % tree->MaxRow;
+        while (tree->CurrentRow < growToRow) {
+            TreeGrow(tree);
         }
     }
 }
 
-void update(Tree *tree) {
-    if (tree->grow_timer > 0) tree->grow_timer--;
-    if (tree->grow_timer == 0 && tree->current_row < tree->max_row) {
-        grow(tree);
-        tree->grow_timer = tree->grow_time;
+void TreeUpdate(Tree *tree) {
+    if (tree->GrowTimer > 0) tree->GrowTimer--;
+    if (tree->GrowTimer == 0 && tree->CurrentRow < tree->MaxRow) {
+        TreeGrow(tree);
+        tree->GrowTimer = tree->GrowTime;
     }
 }
 
-void draw(Tree *tree) {
-    for (int i = 0; i <= tree->current_row; i++) {
-        for (int j = 0; j < tree->branch_count[i]; j++) {
-            Branch *b = &tree->branches[i][j];
-            Vector2 v2 = b->v2;
-            if (i == tree->current_row && tree->grow_timer > 0) {
+void TreeDraw(Tree *tree) {
+    for (int i = 0; i <= tree->CurrentRow; i++) {
+        for (int j = 0; j < tree->BranchCount[i]; j++) {
+            TreeBranch *b = &tree->Branches[i][j];
+            Vector2 v2 = b->V2;
+            if (i == tree->CurrentRow && tree->GrowTimer > 0) {
                 v2 = (Vector2){
-                    .x = get_next_pos(tree, b->v1.x, v2.x),
-                    .y = get_next_pos(tree, b->v1.y, v2.y)
+                    .x = TreeGetNextPos(tree, b->V1.x, v2.x),
+                    .y = TreeGetNextPos(tree, b->V1.y, v2.y)
                 };
             }
-            DrawLineEx(b->v1, v2, b->w, b->color);
+            DrawLineEx(b->V1, v2, b->Width, b->Color);
         }
-        for (int j = 0; j < tree->leaf_count; j++) {
-            Leaf *l = &tree->leaves[j];
-            // Fix signed/unsigned comparison warning
-            if ((int)l->row < i && !(i == tree->current_row && tree->grow_timer > 0)) {
-                DrawCircleV(l->v1, l->r, l->color);
-                DrawCircleV(l->v2, l->r, l->color);
+        for (int j = 0; j < tree->LeafCount; j++) {
+            TreeLeaf *l = &tree->Leaves[j];
+            if ((int)l->Row < i && !(i == tree->CurrentRow && tree->GrowTimer > 0)) {
+                DrawCircleV(l->V1, l->Radius, l->Color);
+                DrawCircleV(l->V2, l->Radius, l->Color);
             }
         }
     }
 }
 
-Tree new_tree() {
+Tree TreeNewTree() {
     Tree tree = {
-        .leaf_chance = 0.5,
-        .max_row = 12,
-        .current_row = 0,
-        .x = 400,
-        .y = 500,
-        .w = 10,
-        .h = 40,
-        .random_row = false,
-        .split_chance = 50,
-        .split_angle = {20, 30},
-        .cs_branch = {125, 178, 122, 160, 76, 90},
-        .cs_leaf = {150, 204, 190, 230, 159, 178},
-        .left_x = 9999999,
-        .right_x = -9999999,
-        .grow_timer = 0,
-        .grow_time = 20,
-        .leaf_count = 0
+        .LeafChance = 0.5,
+        .MaxRow = 12,
+        .CurrentRow = 0,
+        .X = 400,
+        .Y = 500,
+        .Width = 10,
+        .Height = 40,
+        .RandomRow = false,
+        .SplitChance = 50,
+        .SplitAngle = {20, 30},
+        .CsBranch = {125, 178, 122, 160, 76, 90},
+        .CsLeaf = {150, 204, 190, 230, 159, 178},
+        .LeftX = 9999999,
+        .RightX = -9999999,
+        .GrowTimer = 0,
+        .GrowTime = 20,
+        .LeafCount = 0
     };
     for (int i = 0; i < MAX_ROWS; i++) {
-        tree.branch_count[i] = 0;
+        tree.BranchCount[i] = 0;
     }
     return tree;
 }
