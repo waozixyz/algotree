@@ -198,7 +198,6 @@ void Tree3DGrow(Tree3D *tree) {
     }
     tree->CurrentRow++;
 }
-
 void Tree3DLoad(Tree3D *tree) {
     Tree3DAppendRow(tree);
     Tree3DBranch initialBranch = {
@@ -208,7 +207,7 @@ void Tree3DLoad(Tree3D *tree) {
         .V2 = (Vector3){tree->X, tree->Y + tree->Height, tree->Z},  // Start growing upward
         .Width = tree->Width,
         .Height = tree->Height,
-        .Color = WHITE
+        .Color = Tree3DGetColor(tree->CsBranch)  // Use branch color system instead of WHITE
     };
     Tree3DAppendBranch(tree, 0, initialBranch);
     tree->GrowTimer = rand() % tree->GrowTime;
