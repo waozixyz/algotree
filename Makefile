@@ -11,12 +11,12 @@ ifeq ($(OS),Windows_NT)
     LDLIBS = -lraylib -lopengl32 -lgdi32 -lwinmm
     EXT = .exe
 else
-	ifeq ($(UNAME_S),Darwin)
-	    LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreFoundation
-	else
-	    LDLIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-	endif
-	EXT =
+    ifeq ($(UNAME_S),Darwin)
+        LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreFoundation
+    else
+        LDLIBS = -lraylib -lGL -lm -lpthread -ldl -lrt
+    endif
+    EXT =
 endif
 
 # Directories
@@ -25,18 +25,18 @@ BIN_DIR = bin
 
 # Files
 EXAMPLE_SRC = $(wildcard $(EXAMPLE_DIR)/*.c)
-TARGET = $(BIN_DIR)/example$(EXT)
+EXAMPLE_TARGETS = $(patsubst $(EXAMPLE_DIR)/%.c,$(BIN_DIR)/%$(EXT),$(EXAMPLE_SRC))
 
 # Create directories
 $(shell mkdir -p $(BIN_DIR))
 
 # Main target
-all: $(TARGET)
+all: $(EXAMPLE_TARGETS)
 
-# Linking
-$(TARGET): $(EXAMPLE_SRC)
-	@echo "Compiling and linking $@"
-	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@ $(LDFLAGS) $(LDLIBS)
+# Rule to compile each example
+$(BIN_DIR)/%$(EXT): $(EXAMPLE_DIR)/%.c tree2d.h tree3d.h
+	@echo "Compiling $< into $@"
+	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 # Clean
 clean:

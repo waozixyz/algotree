@@ -1,5 +1,5 @@
 #define TREE_IMPLEMENTATION
-#include "tree.h"
+#include "tree2d.h"
 
 int main() {
     // Initialize window dimensions

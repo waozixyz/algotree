@@ -29,3 +29,5 @@ Thumbs.db
 
 # Raylib-related files (if any)
 libraylib.*
+
+.devenv
