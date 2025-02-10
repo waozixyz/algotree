@@ -1,9 +1,12 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -std=c99
+CFLAGS = -Wall -Wextra -std=c99
 INCLUDES = -I.
 LDFLAGS = -L/usr/local/lib
 LDLIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+
+# Debug flags
+DEBUG_CFLAGS = -g -O0 -DDEBUG
 
 # Detect OS
 UNAME_S := $(shell uname -s)
@@ -30,12 +33,16 @@ EXAMPLE_TARGETS = $(patsubst $(EXAMPLE_DIR)/%.c,$(BIN_DIR)/%$(EXT),$(EXAMPLE_SRC
 # Create directories
 $(shell mkdir -p $(BIN_DIR))
 
-# Main target
+# Main targets
+all: CFLAGS += -O2
 all: $(EXAMPLE_TARGETS)
+
+debug: CFLAGS += -g -O0 -DDEBUG -fno-omit-frame-pointer
+debug: $(EXAMPLE_TARGETS)
 
 # Rule to compile each example
 $(BIN_DIR)/%$(EXT): $(EXAMPLE_DIR)/%.c tree2d.h tree3d.h
-	@echo "Compiling $< into $@"
+	@echo "Compiling $< into $@ with flags: $(CFLAGS)"
 	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 # Clean
@@ -46,5 +53,7 @@ clean:
 # Rebuild
 rebuild: clean all
 
+rebuild-debug: clean debug
+
 # Phony targets
-.PHONY: all clean rebuild
+.PHONY: all debug clean rebuild rebuild-debug

@@ -1,49 +1,53 @@
-#ifndef TREE_3D_H
-#define TREE_3D_H
+#ifndef TREE3D_H
+#define TREE3D_H
 
 #include <raylib.h>
-#include <math.h>
 #include <stdlib.h>
+#include <math.h>
 #include <stdio.h>
+#include <time.h>
 
 // Configuration Macros
 #ifndef MAX_ROWS
 #define MAX_ROWS 100
 #endif
+
 #ifndef MAX_BRANCHES_PER_ROW
 #define MAX_BRANCHES_PER_ROW 1000
 #endif
+
 #ifndef MAX_LEAVES
 #define MAX_LEAVES 10000
 #endif
 
 // Define this macro in ONE source file to include the implementation
-#ifdef TREE_IMPLEMENTATION
-#define TREE_IMPL
+#ifdef TREE3D_IMPLEMENTATION
+#define TREE3D_IMPL
 #endif
 
 // Struct Definitions
 typedef struct {
-    int DegX; // Angle around the X-axis (horizontal rotation)
-    int DegY; // Angle around the Y-axis (vertical rotation)
+    int DegX;
+    int DegZ;
     Vector3 V1;
     Vector3 V2;
     float Width;
     float Height;
     Color Color;
-} TreeBranch3D;
+} Tree3DBranch;
 
 typedef struct {
     size_t Row;
-    Vector3 Position;
+    Vector3 V1;
+    Vector3 V2;
     float Radius;
     Color Color;
-} TreeLeaf3D;
+} Tree3DLeaf;
 
 typedef struct {
-    TreeBranch3D Branches[MAX_ROWS][MAX_BRANCHES_PER_ROW];
-    int BranchCount[MAX_ROWS];
-    TreeLeaf3D Leaves[MAX_LEAVES];
+    Tree3DBranch **Branches;  // Dynamic 2D array
+    int *BranchCount;         // Dynamic array
+    Tree3DLeaf *Leaves;       // Dynamic array
     int LeafCount;
     float LeafChance;
     int MaxRow;
@@ -53,26 +57,30 @@ typedef struct {
     int CurrentRow;
     bool RandomRow;
     int SplitChance;
-    int SplitAngle[2]; // Range for random split angles
-    unsigned char CsBranch[6]; // RGB color range for branches
-    unsigned char CsLeaf[6];   // RGB color range for leaves
-    float LeftX;
-    float RightX;
-    float FrontZ;
-    float BackZ;
+    int SplitAngle[2];
+    unsigned char CsBranch[6];
+    unsigned char CsLeaf[6];
+    float MinX;
+    float MaxX;
+    float MinZ;
+    float MaxZ;
     int GrowTimer;
     int GrowTime;
     float Width;
     float Height;
+    // Add allocation tracking
+    int AllocatedRows;
+    int AllocatedBranchesPerRow;
+    int AllocatedLeaves;
 } Tree3D;
 
 // Function Declarations
-Tree3D TreeNewTree3D();
-void TreeLoad3D(Tree3D *tree);
-void TreeUpdate3D(Tree3D *tree);
-void TreeDraw3D(Tree3D *tree);
+Tree3D Tree3DNewTree();
+void Tree3DLoad(Tree3D *tree);
+void Tree3DUpdate(Tree3D *tree);
+void Tree3DDraw(Tree3D *tree);
 
-#ifdef TREE_IMPL
+#ifdef TREE3D_IMPL
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -80,40 +88,26 @@ void TreeDraw3D(Tree3D *tree);
 #define DEG_TO_RAD (M_PI / 180.0)
 
 // Helper Functions
-Color TreeGetColor(unsigned char cs[6]) {
+Color Tree3DGetColor(unsigned char cs[6]) {
     unsigned char r = rand() % (cs[1] - cs[0] + 1) + cs[0];
     unsigned char g = rand() % (cs[3] - cs[2] + 1) + cs[2];
     unsigned char b = rand() % (cs[5] - cs[4] + 1) + cs[4];
     return (Color){r, g, b, 255};
 }
 
-Vector3 TreeGetRot(int degX, int degY, float height) {
-    float radX = degX * DEG_TO_RAD;
-    float radY = degY * DEG_TO_RAD;
-    return (Vector3){
-        .x = sinf(radY) * cosf(radX) * height,
-        .y = cosf(radY) * height,
-        .z = sinf(radY) * sinf(radX) * height
-    };
+void Tree3DAppendRow(Tree3D *tree) {
+    tree->BranchCount[tree->CurrentRow + 1] = 0;
 }
 
-void TreeAppendRow3D(Tree3D *tree) {
-    if (tree->CurrentRow + 1 < MAX_ROWS) {
-        tree->BranchCount[tree->CurrentRow + 1] = 0;
-    } else {
-        fprintf(stderr, "Error: Maximum rows exceeded.\n");
-    }
-}
-
-void TreeAppendBranch3D(Tree3D *tree, int row, TreeBranch3D branch) {
-    if (row >= 0 && row < MAX_ROWS && tree->BranchCount[row] < MAX_BRANCHES_PER_ROW) {
+void Tree3DAppendBranch(Tree3D *tree, int row, Tree3DBranch branch) {
+    if (tree->BranchCount[row] < MAX_BRANCHES_PER_ROW) {
         tree->Branches[row][tree->BranchCount[row]++] = branch;
     } else {
         fprintf(stderr, "Error: Maximum branches per row exceeded.\n");
     }
 }
 
-void TreeAppendLeaf3D(Tree3D *tree, TreeLeaf3D leaf) {
+void Tree3DAppendLeaf(Tree3D *tree, Tree3DLeaf leaf) {
     if (tree->LeafCount < MAX_LEAVES) {
         tree->Leaves[tree->LeafCount++] = leaf;
     } else {
@@ -121,144 +115,256 @@ void TreeAppendLeaf3D(Tree3D *tree, TreeLeaf3D leaf) {
     }
 }
 
-int TreeGetAngle(Tree3D *tree) {
+int Tree3DGetAngle(Tree3D *tree) {
     return rand() % (tree->SplitAngle[1] - tree->SplitAngle[0] + 1) + tree->SplitAngle[0];
 }
+Vector3 Tree3DGetRotation(int degX, int degZ) {
+    // Convert angles to radians
+    float radX = degX * DEG_TO_RAD;
+    float radZ = degZ * DEG_TO_RAD;
 
-void TreeAddBranch3D(Tree3D *tree, int degX, int degY, TreeBranch3D *branch) {
-    float w = branch->Width * 0.9f;
-    float h = branch->Height * 0.95f;
-    Vector3 nextPos = {
-        .x = branch->V2.x + TreeGetRot(degX, degY, h).x,
-        .y = branch->V2.y + TreeGetRot(degX, degY, h).y,
-        .z = branch->V2.z + TreeGetRot(degX, degY, h).z
+    // Calculate direction vector
+    // Start with a vector pointing up (0,1,0)
+    // Then rotate around X and Z axes
+    Vector3 direction = {
+        sinf(radZ),                          // X component
+        cosf(radX) * cosf(radZ),            // Y component (upward growth)
+        sinf(radX)                          // Z component
     };
-    Color c = TreeGetColor(tree->CsBranch);
-    TreeBranch3D newBranch = {
+
+    return direction;
+}
+void Tree3DAddBranch(Tree3D *tree, int degX, int degZ, Tree3DBranch *branch) {
+    float w = branch->Width * 0.9;
+    float h = branch->Height * 0.95;
+    Vector3 pos = branch->V2;
+    Vector3 rot = Tree3DGetRotation(degX, degZ);
+    Vector3 newPos = {
+        pos.x + rot.x * h,
+        pos.y + rot.y * h,
+        pos.z + rot.z * h
+    };
+    Color c = Tree3DGetColor(tree->CsBranch);
+    
+    Tree3DBranch newBranch = {
         .DegX = degX,
-        .DegY = degY,
-        .V1 = branch->V2,
-        .V2 = nextPos,
+        .DegZ = degZ,
+        .V1 = pos,
+        .V2 = newPos,
         .Width = w,
         .Height = h,
         .Color = c
     };
-    TreeAppendBranch3D(tree, tree->CurrentRow + 1, newBranch);
+    Tree3DAppendBranch(tree, tree->CurrentRow + 1, newBranch);
 
     float leafChance = ((float)rand() / RAND_MAX) * tree->CurrentRow / tree->MaxRow;
     if (leafChance > tree->LeafChance) {
-        TreeLeaf3D newLeaf = {
+        Vector3 rotLeaf = Tree3DGetRotation(degX * 2, degZ * 2);
+        Vector3 leafOffset = {rotLeaf.x * w, rotLeaf.y * w, rotLeaf.z * w};
+        Tree3DLeaf newLeaf = {
             .Row = tree->CurrentRow,
-            .Position = nextPos,
             .Radius = w,
-            .Color = TreeGetColor(tree->CsLeaf)
+            .V1 = (Vector3){newPos.x + leafOffset.x, newPos.y + leafOffset.y, newPos.z + leafOffset.z},
+            .V2 = (Vector3){newPos.x - leafOffset.x, newPos.y - leafOffset.y, newPos.z - leafOffset.z},
+            .Color = Tree3DGetColor(tree->CsLeaf)
         };
-        TreeAppendLeaf3D(tree, newLeaf);
+        Tree3DAppendLeaf(tree, newLeaf);
     }
 
-    if (nextPos.x < tree->LeftX) tree->LeftX = nextPos.x;
-    if (nextPos.x > tree->RightX) tree->RightX = nextPos.x;
-    if (nextPos.z < tree->FrontZ) tree->FrontZ = nextPos.z;
-    if (nextPos.z > tree->BackZ) tree->BackZ = nextPos.z;
+    if (newPos.x < tree->MinX) tree->MinX = newPos.x;
+    if (newPos.x > tree->MaxX) tree->MaxX = newPos.x + w;
+    if (newPos.z < tree->MinZ) tree->MinZ = newPos.z;
+    if (newPos.z > tree->MaxZ) tree->MaxZ = newPos.z + w;
 }
 
-void TreeGrow3D(Tree3D *tree) {
-    TreeAppendRow3D(tree);
+float Tree3DGetNextPos(Tree3D *tree, float a, float b) {
+    return b + (a - b) * tree->GrowTimer / (float)tree->GrowTime;
+}
+
+void Tree3DGrow(Tree3D *tree) {
+    Tree3DAppendRow(tree);
     int prevRow = tree->CurrentRow;
     for (int i = 0; i < tree->BranchCount[prevRow]; i++) {
-        TreeBranch3D *b = &tree->Branches[prevRow][i];
+        Tree3DBranch *b = &tree->Branches[prevRow][i];
         int split = rand() % 100;
         if (tree->SplitChance > split) {
-            TreeAddBranch3D(tree, b->DegX - TreeGetAngle(tree), b->DegY, b);
-            TreeAddBranch3D(tree, b->DegX + TreeGetAngle(tree), b->DegY, b);
+            int angleX = Tree3DGetAngle(tree);
+            int angleZ = Tree3DGetAngle(tree);
+            Tree3DAddBranch(tree, b->DegX - angleX, b->DegZ - angleZ, b);
+            Tree3DAddBranch(tree, b->DegX + angleX, b->DegZ + angleZ, b);
         } else {
-            TreeAddBranch3D(tree, b->DegX, b->DegY, b);
+            Tree3DAddBranch(tree, b->DegX, b->DegZ, b);
         }
     }
     tree->CurrentRow++;
 }
 
-void TreeLoad3D(Tree3D *tree) {
-    int angleX = -90;
-    int angleY = 0;
-    TreeAppendRow3D(tree);
-    TreeBranch3D initialBranch = {
-        .DegX = angleX,
-        .DegY = angleY,
+void Tree3DLoad(Tree3D *tree) {
+    Tree3DAppendRow(tree);
+    Tree3DBranch initialBranch = {
+        .DegX = 0,
+        .DegZ = 0,
         .V1 = (Vector3){tree->X, tree->Y, tree->Z},
-        .V2 = (Vector3){tree->X, tree->Y, tree->Z},
+        .V2 = (Vector3){tree->X, tree->Y + tree->Height, tree->Z},  // Start growing upward
         .Width = tree->Width,
         .Height = tree->Height,
         .Color = WHITE
     };
-    TreeAppendBranch3D(tree, 0, initialBranch);
+    Tree3DAppendBranch(tree, 0, initialBranch);
     tree->GrowTimer = rand() % tree->GrowTime;
     if (tree->RandomRow) {
         int growToRow = rand() % tree->MaxRow;
         while (tree->CurrentRow < growToRow) {
-            TreeGrow3D(tree);
+            Tree3DGrow(tree);
         }
     }
 }
 
-void TreeUpdate3D(Tree3D *tree) {
+void Tree3DUpdate(Tree3D *tree) {
     if (tree->GrowTimer > 0) tree->GrowTimer--;
     if (tree->GrowTimer == 0 && tree->CurrentRow < tree->MaxRow) {
-        TreeGrow3D(tree);
+        Tree3DGrow(tree);
         tree->GrowTimer = tree->GrowTime;
     }
 }
-void TreeDraw3D(Tree3D *tree) {
+
+void Tree3DDraw(Tree3D *tree) {
     for (int i = 0; i <= tree->CurrentRow; i++) {
         for (int j = 0; j < tree->BranchCount[i]; j++) {
-            TreeBranch3D *b = &tree->Branches[i][j];
-            printf("Drawing branch at (%f, %f, %f) -> (%f, %f, %f)\n",
-                   b->V1.x, b->V1.y, b->V1.z, b->V2.x, b->V2.y, b->V2.z);
-            DrawCylinderEx(b->V1, b->V2, b->Width, b->Width, 8, b->Color);
+            Tree3DBranch *b = &tree->Branches[i][j];
+            Vector3 v2 = b->V2;
+            if (i == tree->CurrentRow && tree->GrowTimer > 0) {
+                v2 = (Vector3){
+                    Tree3DGetNextPos(tree, b->V1.x, v2.x),
+                    Tree3DGetNextPos(tree, b->V1.y, v2.y),
+                    Tree3DGetNextPos(tree, b->V1.z, v2.z)
+                };
+            }
+            DrawCylinderEx(b->V1, v2, b->Width, b->Width * 0.8f, 8, b->Color);
         }
-    }
-    for (int j = 0; j < tree->LeafCount; j++) {
-        TreeLeaf3D *l = &tree->Leaves[j];
-        printf("Drawing leaf at (%f, %f, %f)\n", l->Position.x, l->Position.y, l->Position.z);
-        DrawSphere(l->Position, l->Radius, l->Color);
+        for (int j = 0; j < tree->LeafCount; j++) {
+            Tree3DLeaf *l = &tree->Leaves[j];
+            if ((int)l->Row < i && !(i == tree->CurrentRow && tree->GrowTimer > 0)) {
+                DrawSphere(l->V1, l->Radius, l->Color);
+                DrawSphere(l->V2, l->Radius, l->Color);
+            }
+        }
     }
 }
 
-Tree3D TreeNewTree3D() {
-    Tree3D tree = {
-        .LeafChance = 0.5,
-        .MaxRow = 12,
-        .CurrentRow = 0,
-        .X = 0,
-        .Y = 0,
-        .Z = 0,
-        .Width = 1.0f,
-        .Height = 4.0f,
-        .RandomRow = false,
-        .SplitChance = 50,
-        .SplitAngle = {20, 30},
-        .CsBranch = {125, 178, 122, 160, 76, 90},
-        .CsLeaf = {150, 204, 190, 230, 159, 178},
-        .LeftX = 9999999,
-        .RightX = -9999999,
-        .FrontZ = 9999999,
-        .BackZ = -9999999,
-        .GrowTimer = 0,
-        .GrowTime = 20,
-        .LeafCount = 0
-    };
-
-    printf("Initializing Tree3D struct...\n");
-    printf("MaxRows: %d, MaxBranchesPerRow: %d, MaxLeaves: %d\n", MAX_ROWS, MAX_BRANCHES_PER_ROW, MAX_LEAVES);
-
-    for (int i = 0; i < MAX_ROWS; i++) {
-        tree.BranchCount[i] = 0;
-        printf("BranchCount[%d] initialized to %d\n", i, tree.BranchCount[i]);
+// Modified initialization function
+Tree3D Tree3DNewTree() {
+    printf("Starting Tree3DNewTree\n");
+    
+    Tree3D tree = {0};  // Zero initialize basic members
+    
+    // Allocate memory for arrays
+    tree.AllocatedRows = MAX_ROWS;
+    tree.AllocatedBranchesPerRow = MAX_BRANCHES_PER_ROW;
+    tree.AllocatedLeaves = MAX_LEAVES;
+    
+    // Allocate BranchCount array
+    tree.BranchCount = (int*)calloc(tree.AllocatedRows, sizeof(int));
+    if (!tree.BranchCount) {
+        fprintf(stderr, "Failed to allocate BranchCount array\n");
+        exit(1);
     }
-
+    
+    // Allocate Branches 2D array
+    tree.Branches = (Tree3DBranch**)malloc(tree.AllocatedRows * sizeof(Tree3DBranch*));
+    if (!tree.Branches) {
+        fprintf(stderr, "Failed to allocate Branches array\n");
+        free(tree.BranchCount);
+        exit(1);
+    }
+    
+    for (int i = 0; i < tree.AllocatedRows; i++) {
+        tree.Branches[i] = (Tree3DBranch*)malloc(tree.AllocatedBranchesPerRow * sizeof(Tree3DBranch));
+        if (!tree.Branches[i]) {
+            fprintf(stderr, "Failed to allocate Branches row %d\n", i);
+            // Clean up previously allocated memory
+            for (int j = 0; j < i; j++) {
+                free(tree.Branches[j]);
+            }
+            free(tree.Branches);
+            free(tree.BranchCount);
+            exit(1);
+        }
+    }
+    
+    // Allocate Leaves array
+    tree.Leaves = (Tree3DLeaf*)malloc(tree.AllocatedLeaves * sizeof(Tree3DLeaf));
+    if (!tree.Leaves) {
+        fprintf(stderr, "Failed to allocate Leaves array\n");
+        for (int i = 0; i < tree.AllocatedRows; i++) {
+            free(tree.Branches[i]);
+        }
+        free(tree.Branches);
+        free(tree.BranchCount);
+        exit(1);
+    }
+    
+    // Initialize basic values
+    tree.LeafCount = 0;
+    tree.LeafChance = 0.5f;
+    tree.MaxRow = 12;
+    tree.CurrentRow = 0;
+    tree.X = 0.0f;
+    tree.Y = 0.0f;
+    tree.Z = 0.0f;
+    tree.Width = 1.0f;
+    tree.Height = 4.0f;
+    tree.RandomRow = false;
+    tree.SplitChance = 50;
+    tree.SplitAngle[0] = 20;
+    tree.SplitAngle[1] = 30;
+    
+    // Color settings
+    tree.CsBranch[0] = 125; tree.CsBranch[1] = 178;
+    tree.CsBranch[2] = 122; tree.CsBranch[3] = 160;
+    tree.CsBranch[4] = 76;  tree.CsBranch[5] = 90;
+    
+    tree.CsLeaf[0] = 150; tree.CsLeaf[1] = 204;
+    tree.CsLeaf[2] = 190; tree.CsLeaf[3] = 230;
+    tree.CsLeaf[4] = 159; tree.CsLeaf[5] = 178;
+    
+    // Bounds
+    tree.MinX = 9999999.0f;
+    tree.MaxX = -9999999.0f;
+    tree.MinZ = 9999999.0f;
+    tree.MaxZ = -9999999.0f;
+    
+    // Timers
+    tree.GrowTimer = 0;
+    tree.GrowTime = 20;
+    
     return tree;
 }
 
+// Add cleanup function
+void Tree3DFree(Tree3D *tree) {
+    if (!tree) return;
+    
+    if (tree->Branches) {
+        for (int i = 0; i < tree->AllocatedRows; i++) {
+            if (tree->Branches[i]) {
+                free(tree->Branches[i]);
+            }
+        }
+        free(tree->Branches);
+        tree->Branches = NULL;
+    }
+    
+    if (tree->BranchCount) {
+        free(tree->BranchCount);
+        tree->BranchCount = NULL;
+    }
+    
+    if (tree->Leaves) {
+        free(tree->Leaves);
+        tree->Leaves = NULL;
+    }
+}
 
-#endif // TREE_IMPL
-#endif // TREE_3D_H
+#endif // TREE3D_IMPL
+#endif // TREE3D_H
