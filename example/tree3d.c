@@ -84,7 +84,7 @@ int main(void) {
         if (mouseWheel != 0) {
             cameraDistance -= mouseWheel * 2.0f;
             if (cameraDistance < 5.0f) cameraDistance = 5.0f;
-            if (cameraDistance > 30.0f) cameraDistance = 30.0f;
+            if (cameraDistance > 60.0f) cameraDistance = 60.0f;
             
             camera.position.x = sinf(cameraAngle) * cameraDistance;
             camera.position.z = cosf(cameraAngle) * cameraDistance;
