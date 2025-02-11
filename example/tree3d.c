@@ -20,18 +20,40 @@ int main(void) {
     // Initialize the 3D tree
     Tree3D tree = Tree3DNewTree();
     
+    // Base settings
     tree.X = 0.0f;
     tree.Y = 0.0f;
     tree.Z = 0.0f;
     tree.Width = 0.5f;
     tree.Height = 2.0f;
+    tree.Scale = 1.0f;
+    
+    // Growth settings
     tree.MaxRow = 12;
     tree.LeafChance = 0.5f;
     tree.SplitChance = 50;
     tree.SplitAngle[0] = 20;
     tree.SplitAngle[1] = 30;
     tree.GrowTime = 10;
-;
+    
+    // LOD settings
+    tree.lodDistances[0] = 10.0f;
+    tree.lodDistances[1] = 20.0f;
+    tree.lodDistances[2] = 30.0f;
+    tree.lodLevels[0] = 8;  // High detail
+    tree.lodLevels[1] = 6;  // Medium detail
+    tree.lodLevels[2] = 4;  // Low detail
+    
+    // Color settings
+    tree.CsBranch[0] = 125; tree.CsBranch[1] = 178;  // Red range
+    tree.CsBranch[2] = 122; tree.CsBranch[3] = 160;  // Green range
+    tree.CsBranch[4] = 76;  tree.CsBranch[5] = 90;   // Blue range
+    
+    tree.CsLeaf[0] = 150; tree.CsLeaf[1] = 204;      // Red range
+    tree.CsLeaf[2] = 190; tree.CsLeaf[3] = 230;      // Green range
+    tree.CsLeaf[4] = 159; tree.CsLeaf[5] = 178;      // Blue range
+    
+    // Initialize memory and data structures
     Tree3DLoad(&tree);
 
     SetTargetFPS(60);
@@ -79,7 +101,10 @@ int main(void) {
         DrawGrid(20, 1.0f);
 
         // Draw the 3D tree
-        Tree3DDraw(&tree);
+        if (tree.needsBoundsUpdate) {
+            Tree3DUpdateBounds(&tree);
+        }
+        Tree3DDraw(&tree, camera);  // Pass the camera to Tree3DDraw
 
         EndMode3D();
 
@@ -88,11 +113,16 @@ int main(void) {
         DrawText("Left click and drag to rotate camera", 10, 30, 20, DARKGRAY);
         DrawText("Mouse wheel to zoom in/out", 10, 50, 20, DARKGRAY);
         DrawText("Press ESC to exit", 10, 70, 20, DARKGRAY);
+        
+        char debugInfo[100];
+        sprintf(debugInfo, "Current Row: %d/%d", tree.CurrentRow, tree.MaxRow);
+        DrawText(debugInfo, 10, 90, 20, DARKGRAY);
 
         EndDrawing();
     }
+    
+    // Cleanup
     Tree3DFree(&tree);
-
     CloseWindow();
     return 0;
 }
