@@ -61,6 +61,10 @@ struct Bush3D {
     float BurnLevel;      // 0.0 = fine, 1.0 = burned
     bool IsBurned;
 
+    // Track active burning state for visual effects
+    float lastBurnTime;        // Last time this bush received burn damage
+    bool isActivelyBurning;    // true if recently receiving fire (for red/orange visuals)
+
     // Branch data for structure
     struct {
         Vector3 start;
@@ -106,12 +110,24 @@ float Bush3DRandom(Bush3D* bush) {
 }
 
 float Bush3DGetScale(const Bush3D* bush) {
+    // Get base scale from growth
+    float growthScale;
     if (bush->CurrentGrowTime >= bush->GrowTime) {
-        return bush->Scale;
+        growthScale = bush->Scale;
+    } else {
+        // Scale grows from 0.1 to 1.0 over GrowTime
+        float progress = bush->CurrentGrowTime / bush->GrowTime;
+        growthScale = 0.1f + (0.9f * progress);
     }
-    // Scale grows from 0.1 to 1.0 over GrowTime
-    float progress = bush->CurrentGrowTime / bush->GrowTime;
-    return 0.1f + (0.9f * progress);
+
+    // Apply burn shrinkage: bush continuously shrinks to oblivion as it burns
+    if (bush->BurnLevel > 0.0f) {
+        // Squared shrinkage for faster early shrink: (1 - burn)^2
+        float shrinkFactor = (1.0f - bush->BurnLevel);
+        growthScale *= shrinkFactor * shrinkFactor;
+    }
+
+    return growthScale;
 }
 
 Bush3D Bush3DNewBush(float x, float y, float z) {
@@ -145,6 +161,8 @@ Bush3D Bush3DNewBush(float x, float y, float z) {
     // Burn state
     bush.BurnLevel = 0.0f;
     bush.IsBurned = false;
+    bush.lastBurnTime = 0.0f;
+    bush.isActivelyBurning = false;
 
     bush.branchCount = 0;
 
@@ -237,6 +255,18 @@ void Bush3DUpdate(Bush3D* bush, float deltaTime) {
         }
     }
 
+    // Clear active burning state after 0.5 seconds of no burn damage
+    // This allows bushes to disappear if the fire moves away
+    if (bush->isActivelyBurning && bush->lastBurnTime > 0) {
+        float timeSinceBurn = (float)GetTime() - bush->lastBurnTime;
+        if (timeSinceBurn > 0.5f) {
+            bush->isActivelyBurning = false;
+        }
+    }
+
+    // Bush shrinks continuously as BurnLevel increases (handled in Bush3DGetScale)
+    // Bush only disappears when BurnLevel reaches 1.0 (fully shrunk to oblivion)
+
     // Update bounds based on current scale
     float scale = Bush3DGetScale(bush);
     bush->bounds.min = (Vector3){bush->X - 0.5f * scale, bush->Y, bush->Z - 0.5f * scale};
@@ -247,8 +277,10 @@ void Bush3DDraw(Bush3D* bush) {
     if (!bush || bush->IsBurned) return;
 
     float scale = Bush3DGetScale(bush);
+    bool isActiveBurn = bush->isActivelyBurning;
+    float burnLevel = bush->BurnLevel;
 
-    // Draw branches
+    // === Draw branches ===
     Color branchColor = (Color){
         bush->ColorBranch[0],
         bush->ColorBranch[1],
@@ -256,13 +288,28 @@ void Bush3DDraw(Bush3D* bush) {
         255
     };
 
-    // Apply burn color if burning
-    if (bush->BurnLevel > 0.0f) {
-        // Blend toward black/burned color
-        float burn = bush->BurnLevel;
-        branchColor.r = (unsigned char)(branchColor.r * (1.0f - burn * 0.7f));
-        branchColor.g = (unsigned char)(branchColor.g * (1.0f - burn * 0.9f));
-        branchColor.b = (unsigned char)(branchColor.b * (1.0f - burn * 0.9f));
+    if (burnLevel > 0.0f) {
+        if (isActiveBurn) {
+            // ACTIVELY BURNING: Brown → RED → ORANGE
+            if (burnLevel < 0.3f) {
+                // Brown to Red transition
+                float t = burnLevel / 0.3f;
+                branchColor.r = (unsigned char)(branchColor.r * (1.0f - t) + 200 * t);
+                branchColor.g = (unsigned char)(branchColor.g * (1.0f - t * 0.7f));
+                branchColor.b = (unsigned char)(branchColor.b * (1.0f - t));
+            } else {
+                // Red to Bright Orange (fire effect)
+                branchColor.r = 255;
+                branchColor.g = (unsigned char)(60 + burnLevel * 80);
+                branchColor.b = (unsigned char)(burnLevel * 50);
+            }
+        } else {
+            // COOLING: Brown → Dark → Black
+            float blacken = burnLevel;
+            branchColor.r = (unsigned char)(branchColor.r * (1.0f - blacken * 0.8f) + 30 * blacken);
+            branchColor.g = (unsigned char)(branchColor.g * (1.0f - blacken * 0.9f));
+            branchColor.b = (unsigned char)(branchColor.b * (1.0f - blacken * 0.9f));
+        }
     }
 
     for (int i = 0; i < bush->branchCount; i++) {
@@ -277,7 +324,7 @@ void Bush3DDraw(Bush3D* bush) {
         DrawLine3D(start, end, branchColor);
     }
 
-    // Draw leaves
+    // === Draw leaves ===
     for (int i = 0; i < bush->LeafCount; i++) {
         Vector3 pos = bush->leaves[i].position;
         float radius = bush->leaves[i].radius * scale;
@@ -288,18 +335,34 @@ void Bush3DDraw(Bush3D* bush) {
         pos.y = bush->Y + (pos.y - bush->Y) * scale;
         pos.z = bush->Z + (pos.z - bush->Z) * scale;
 
-        // Apply burn color
-        if (bush->BurnLevel > 0.0f) {
-            float burn = bush->BurnLevel;
-            color.r = (unsigned char)(color.r * (1.0f - burn * 0.3f));  // More red when burning
-            color.g = (unsigned char)(color.g * (1.0f - burn * 0.8f));
-            color.b = (unsigned char)(color.b * (1.0f - burn * 0.8f));
+        if (burnLevel > 0.0f) {
+            if (isActiveBurn) {
+                // ACTIVELY BURNING: Green → RED → BRIGHT ORANGE
+                if (burnLevel < 0.3f) {
+                    // Green to Red transition
+                    float t = burnLevel / 0.3f;
+                    color.r = (unsigned char)(color.r * (1.0f - t) + 255 * t);
+                    color.g = (unsigned char)(color.g * (1.0f - t * 0.9f));
+                    color.b = (unsigned char)(color.b * (1.0f - t));
+                } else {
+                    // Bright Orange/Red fire
+                    color.r = 255;
+                    color.g = (unsigned char)(80 + burnLevel * 100);
+                    color.b = (unsigned char)(burnLevel * 60);
+                }
+            } else {
+                // COOLING: Green → Dark Red → Black
+                float blacken = burnLevel;
+                color.r = (unsigned char)(color.r * (1.0f - blacken * 0.5f) + 40 * blacken);
+                color.g = (unsigned char)(color.g * (1.0f - blacken * 0.95f));
+                color.b = (unsigned char)(color.b * (1.0f - blacken * 0.95f));
+            }
         }
 
         DrawSphere(pos, radius, color);
     }
 
-    // Draw berries (only when mature)
+    // === Draw berries ===
     if (bush->HasBerries && bush->IsMature) {
         for (int i = 0; i < bush->BerryCount; i++) {
             Vector3 pos = bush->berries[i].position;
@@ -311,9 +374,17 @@ void Bush3DDraw(Bush3D* bush) {
             pos.y = bush->Y + (pos.y - bush->Y) * scale;
             pos.z = bush->Z + (pos.z - bush->Z) * scale;
 
-            // Berries glow more when burning (before being destroyed)
-            if (bush->BurnLevel > 0.0f) {
-                color.r = (unsigned char)fminf(255, color.r + bush->BurnLevel * 50);
+            if (isActiveBurn && burnLevel > 0.0f) {
+                // Berries glow bright yellow/orange when burning
+                color.r = 255;
+                color.g = (unsigned char)(180 + burnLevel * 75);
+                color.b = (unsigned char)(burnLevel * 100);
+            } else if (burnLevel > 0.0f) {
+                // Cooling: berries fade to dark
+                float blacken = burnLevel;
+                color.r = (unsigned char)(color.r * (1.0f - blacken));
+                color.g = (unsigned char)(color.g * (1.0f - blacken));
+                color.b = (unsigned char)(color.b * (1.0f - blacken));
             }
 
             DrawSphere(pos, radius, color);
@@ -327,6 +398,13 @@ bool Bush3DIsMature(const Bush3D* bush) {
 
 void Bush3DBurn(Bush3D* bush, float amount) {
     if (!bush) return;
+
+    // Mark as actively burning when receiving damage
+    if (amount > 0.0f) {
+        bush->lastBurnTime = (float)GetTime();
+        bush->isActivelyBurning = true;
+    }
+
     bush->BurnLevel += amount;
     if (bush->BurnLevel >= 1.0f) {
         bush->BurnLevel = 1.0f;
