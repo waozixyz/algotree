@@ -132,6 +132,7 @@ struct Tree3D {
 
 // Function Declarations
 Tree3D Tree3DNewTree(void);
+Tree3D Tree3DNewJungleTree(float x, float y, float z);
 void Tree3DLoad(Tree3D *tree);
 void Tree3DUpdate(Tree3D *tree);
 void Tree3DDraw(Tree3D *tree, Camera3D camera);
@@ -655,6 +656,34 @@ Tree3D Tree3DNewTree() {
     tree.GrowTimer = 0;
     tree.GrowTime = 20;
     
+    return tree;
+}
+
+// Jungle tree variant - darker colors, taller, denser foliage
+Tree3D Tree3DNewJungleTree(float x, float y, float z) {
+    Tree3D tree = Tree3DNewTree();
+
+    tree.X = x;
+    tree.Y = y;
+    tree.Z = z;
+
+    // Jungle properties: taller, denser
+    tree.Height = 6.0f;       // Taller than normal (4.0f)
+    tree.Width = 0.9f;        // Slightly thinner
+    tree.MaxRow = 14;         // More rows for dense canopy
+    tree.LeafChance = 0.65f;  // More leaves
+
+    // Darker jungle colors
+    // Branches: Dark brown/wet wood (60-90, 40-60, 30-50)
+    tree.CsBranch[0] = 60;  tree.CsBranch[1] = 90;
+    tree.CsBranch[2] = 40;  tree.CsBranch[3] = 60;
+    tree.CsBranch[4] = 30;  tree.CsBranch[5] = 50;
+
+    // Leaves: Dark jungle green (30-60, 100-140, 30-60)
+    tree.CsLeaf[0] = 30;   tree.CsLeaf[1] = 60;
+    tree.CsLeaf[2] = 100;  tree.CsLeaf[3] = 140;
+    tree.CsLeaf[4] = 30;   tree.CsLeaf[5] = 60;
+
     return tree;
 }
 
