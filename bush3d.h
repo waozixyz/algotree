@@ -2,6 +2,7 @@
 #define BUSH3D_H
 
 #include <raylib.h>
+#include <raymath.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
@@ -90,7 +91,7 @@ struct Bush3D {
 Bush3D Bush3DNewBush(float x, float y, float z);
 void Bush3DLoad(Bush3D* bush);
 void Bush3DUpdate(Bush3D* bush, float deltaTime);
-void Bush3DDraw(Bush3D* bush);
+void Bush3DDraw(Bush3D* bush, Vector3 playerPos);
 bool Bush3DIsMature(const Bush3D* bush);
 void Bush3DBurn(Bush3D* bush, float amount);
 BoundingBox Bush3DGetBounds(Bush3D* bush);
@@ -273,7 +274,7 @@ void Bush3DUpdate(Bush3D* bush, float deltaTime) {
     bush->bounds.max = (Vector3){bush->X + 0.5f * scale, bush->Y + 1.0f * scale, bush->Z + 0.5f * scale};
 }
 
-void Bush3DDraw(Bush3D* bush) {
+void Bush3DDraw(Bush3D* bush, Vector3 playerPos) {
     if (!bush || bush->IsBurned) return;
 
     float scale = Bush3DGetScale(bush);
@@ -310,6 +311,16 @@ void Bush3DDraw(Bush3D* bush) {
             branchColor.g = (unsigned char)(branchColor.g * (1.0f - blacken * 0.9f));
             branchColor.b = (unsigned char)(branchColor.b * (1.0f - blacken * 0.9f));
         }
+    }
+
+    // Apply flame illumination to branches
+    Vector3 branchCenter = {bush->X, bush->Y + 0.5f, bush->Z};
+    float branchDist = Vector3Distance(branchCenter, playerPos);
+    if (branchDist < 4.0f) {
+        float illumination = 1.0f - (branchDist / 4.0f);
+        illumination = illumination * illumination;
+        branchColor.r = (unsigned char)fminf(255, branchColor.r + illumination * 50);
+        branchColor.g = (unsigned char)fminf(255, branchColor.g + illumination * 25);
     }
 
     for (int i = 0; i < bush->branchCount; i++) {
@@ -351,12 +362,21 @@ void Bush3DDraw(Bush3D* bush) {
                     color.b = (unsigned char)(burnLevel * 60);
                 }
             } else {
-                // COOLING: Green → Dark Red → Black
+                // COOLING: Green → Dark Red → BLACK
                 float blacken = burnLevel;
                 color.r = (unsigned char)(color.r * (1.0f - blacken * 0.5f) + 40 * blacken);
                 color.g = (unsigned char)(color.g * (1.0f - blacken * 0.95f));
                 color.b = (unsigned char)(color.b * (1.0f - blacken * 0.95f));
             }
+        }
+
+        // Apply flame illumination to leaves
+        float leafDist = Vector3Distance(pos, playerPos);
+        if (leafDist < 4.0f) {
+            float illumination = 1.0f - (leafDist / 4.0f);
+            illumination = illumination * illumination;
+            color.r = (unsigned char)fminf(255, color.r + illumination * 50);
+            color.g = (unsigned char)fminf(255, color.g + illumination * 25);
         }
 
         DrawSphere(pos, radius, color);
@@ -385,6 +405,15 @@ void Bush3DDraw(Bush3D* bush) {
                 color.r = (unsigned char)(color.r * (1.0f - blacken));
                 color.g = (unsigned char)(color.g * (1.0f - blacken));
                 color.b = (unsigned char)(color.b * (1.0f - blacken));
+            }
+
+            // Apply flame illumination to berries
+            float berryDist = Vector3Distance(pos, playerPos);
+            if (berryDist < 4.0f) {
+                float illumination = 1.0f - (berryDist / 4.0f);
+                illumination = illumination * illumination;
+                color.r = (unsigned char)fminf(255, color.r + illumination * 50);
+                color.g = (unsigned char)fminf(255, color.g + illumination * 25);
             }
 
             DrawSphere(pos, radius, color);
